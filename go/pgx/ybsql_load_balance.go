@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/yugabyte/pgx/v4"
@@ -24,124 +23,137 @@ const (
 	numconns = 12
 )
 
-var ybInstall string
-var wg sync.WaitGroup
+var ybInstallPath string
 var connCloseChan chan int = make(chan int)
+var baseUrl string = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?refresh_interval=0",
+	user, password, host, port, dbname)
+var interactive bool = false
+var usePool bool = false
 
 func main() {
-	baseUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?refresh_interval=0",
-		user, password, host, port, dbname)
-	var interactive bool = false
-
-	if len(os.Args) > 3 || len(os.Args) < 2 {
-		fmt.Println("Usage: ./ybsql_load_balance [-i] <path-to-ybdb-installation-dir>")
-		log.Fatalf("Incorrect arguments: %s", os.Args)
+	if len(os.Args) > 4 || len(os.Args) < 2 {
+		fmt.Println("Usage: ./ybsql_load_balance [-i] [--pool] <path-to-ybdb-installation-dir>")
+		fmt.Printf("Incorrect arguments: %s\n", os.Args)
+		os.Exit(1)
 	}
-	if len(os.Args) == 2 {
-		interactive = false
-		ybInstall = os.Args[1]
-	}
-	if len(os.Args) == 3 {
-		if os.Args[1] == "-i" {
+	args := os.Args[1:]
+	for _, a := range args {
+		switch a {
+		case "-i":
 			interactive = true
-			ybInstall = os.Args[2]
-		} else {
-			if os.Args[2] == "-i" {
-				interactive = true
-				ybInstall = os.Args[1]
-			} else {
-				fmt.Println("Usage: ./ybsql_load_balance [-i] <path-to-ybdb-installation-dir>")
-				log.Fatalf("Incorrect arguments: %s", os.Args)
+		case "--pool":
+			usePool = true
+		default:
+			_, err := os.Stat(a)
+			if err != nil && os.IsNotExist(err) {
+				fmt.Printf("Path does not exist/Invalid argument: %s\n", a)
+				os.Exit(1)
 			}
+			ybInstallPath = a
 		}
 	}
-	fmt.Printf("Received YBDB install path: %s\n", ybInstall)
+	fmt.Printf("Received YBDB install path: %s\n", ybInstallPath)
 
 	fmt.Println("Destroying earlier YBDB cluster, if any ...")
-	err := exec.Command(ybInstall+"/bin/yb-ctl", "stop").Run()
+	err := exec.Command(ybInstallPath+"/bin/yb-ctl", "stop").Run()
 	if err != nil {
-		log.Fatalf("Could not stop earlier YBDB cluster: %s", err)
+		fmt.Printf("Could not stop earlier YBDB cluster: %s\n", err)
+		os.Exit(1)
 	}
-	err = exec.Command(ybInstall+"/bin/yb-ctl", "destroy").Run()
+	err = exec.Command(ybInstallPath+"/bin/yb-ctl", "destroy").Run()
 	if err != nil {
-		log.Fatalf("Could not destroy earlier YBDB cluster: %s", err)
+		fmt.Printf("Could not destroy earlier YBDB cluster: %s\n", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("Starting a YBDB cluster with rf=3 ...")
-	cmd := exec.Command(ybInstall+"/bin/yb-ctl", "create", "--rf", "3")
+	cmd := exec.Command(ybInstallPath+"/bin/yb-ctl", "create", "--rf", "3")
 	var errout bytes.Buffer
 	cmd.Stderr = &errout
 	err = cmd.Run()
 	if err != nil {
-		log.Fatalf("Could not start YBDB cluster: %s", errout.String())
+		fmt.Printf("Could not start YBDB cluster: %s\n", errout.String())
+		os.Exit(1)
 	}
-	defer exec.Command(ybInstall+"/bin/yb-ctl", "destroy").Run()
+	defer exec.Command(ybInstallPath+"/bin/yb-ctl", "destroy").Run()
 	time.Sleep(1 * time.Second)
 	fmt.Println("Started the cluster!")
 
+	if usePool {
+		startPoolExample()
+	} else {
+		startExample()
+	}
+}
+
+func startExample() {
 	// Create a table and insert a row
 	url := fmt.Sprintf("%s&load_balance=true", baseUrl)
+	fmt.Printf("Using connection url: %s\n", url)
 	createTable(url)
-	verifyZoneList(map[string]map[string][]string{"127.0.0.1": {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"}}})
+	verifyZoneList(map[string]map[string][]string{host: {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"}}})
 	printAZInfo()
-	pause(interactive)
+	pause()
 
 	// make connections using the url via different go routines and check load balance
-	executeQueries(false, url, "---- Querying all servers ...")
-	pause(interactive)
+	executeQueries(url, "---- Querying all servers ...")
+	pause()
 	closeConns(numconns)
 
 	// add a server with a different placement zone
 	fmt.Println("Adding a new server in zone rack2 ...")
-	cmd = exec.Command(ybInstall+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter1.rack2")
+	var errout bytes.Buffer
+	cmd := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter1.rack2")
 	cmd.Stderr = &errout
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		log.Fatalf("Could not add a YBDB server: %s", errout)
 	}
 	time.Sleep(5 * time.Second)
-	executeQueries(false, url, "---- Querying all servers after adding one more server ...")
-	verifyZoneList(map[string]map[string][]string{"127.0.0.1": {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"},
+	executeQueries(url, "---- Querying all servers after adding the new server ...")
+	verifyZoneList(map[string]map[string][]string{host: {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"},
 		"cloud1.datacenter1.rack2": {"127.0.0.4"}}})
 	printAZInfo()
-	pause(interactive)
+	pause()
 	closeConns(numconns)
 
 	// bring down a server and create new connections via go routines. check load balance
 	fmt.Println("Stopping server 2 ...")
-	cmd = exec.Command(ybInstall+"/bin/yb-ctl", "stop_node", "2")
+	cmd = exec.Command(ybInstallPath+"/bin/yb-ctl", "stop_node", "2")
 	cmd.Stderr = &errout
 	err = cmd.Run()
 	if err != nil {
 		log.Fatalf("Could not stop the YBDB server: %s", errout)
 	}
-	executeQueries(true, url, "---- Querying all servers after stopping server 2 ...")
+	executeQueries(url, "---- Querying all servers after stopping server 2 ...")
 	connCnt := numconns / 3
 	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt})
 	if interactive {
 		fmt.Println("You can verify the connection count on http://127.0.0.4:13000/rpcz and similar urls for other servers.")
 	}
-	pause(interactive)
+	pause()
 
 	// create new connections via go routines to new placement zone and check load balance
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
-	executeQueries(true, url, "---- Querying all servers in rack2 ...")
+	fmt.Printf("Using connection url %s\n", url)
+	executeQueries(url, "---- Querying all servers in rack2 ...")
 	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt + numconns})
 	if interactive {
 		fmt.Println("You can verify the connection count on http://127.0.0.4:13000/rpcz and similar urls for other servers.")
 	}
-	pause(interactive)
+	pause()
 
 	// create new connections to both the zones and check load balance
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack1,cloud1.datacenter1.rack2", baseUrl)
-	executeQueries(true, url, "---- Querying all servers in rack1 and rack2 ...")
+	fmt.Printf("Using connection url %s\n", url)
+	executeQueries(url, "---- Querying all servers in rack1 and rack2 ...")
 	verifyLoad(map[string]int{"127.0.0.1": connCnt + (numconns / 2), "127.0.0.2": 0, "127.0.0.3": connCnt + (numconns / 2), "127.0.0.4": connCnt + numconns})
 	if interactive {
 		fmt.Println("You can verify the connection count on http://127.0.0.1:13000/rpcz and similar urls for other servers.")
 	}
-	pause(interactive)
+	pause()
 	closeConns(3 * numconns)
-	fmt.Println("Closing the application")
+	fmt.Println("Closing the application ...")
 }
 
 func closeConns(num int) {
@@ -197,7 +209,7 @@ func verifyZoneList(expected map[string]map[string][]string) {
 	}
 }
 
-func pause(interactive bool) {
+func pause() {
 	if interactive {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print("Press Enter/return to proceed: ")
@@ -261,34 +273,22 @@ func createTable(url string) {
 	printHostLoad()
 }
 
-func executeQueries(keepConn bool, url string, msg string) {
+func executeQueries(url string, msg string) {
 	fmt.Println(msg)
 	fmt.Printf("Creating %d connections across different Go routines\n", numconns)
-	// if !keepConn {
-	// 	fmt.Println("Connections will be closed when Go routines complete their task")
-	// } else {
-	// 	fmt.Println("Connections will be retained even after the Go routines complete their task")
-	// }
 	for i := 0; i < numconns; i++ {
-		// wg.Add(1)
 		go executeQuery("GO Routine "+strconv.Itoa(i), url, connCloseChan)
 	}
 	time.Sleep(5 * time.Second)
 	printHostLoad()
-	// wg.Wait()
 }
 
 func executeQuery(grid string, url string, ccChan chan int) {
-	// defer wg.Done()
-	// log.Printf("[%s] Getting a connection ...", grid)
 	conn, err := pgx.Connect(context.Background(), url)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[%s] Unable to connect to database: %v\n", grid, err)
 		os.Exit(1)
 	}
-	// if !keepConn {
-	// 	defer conn.Close(context.Background())
-	// }
 
 	// Read from the table.
 	var name, language string
@@ -312,7 +312,6 @@ func executeQuery(grid string, url string, ccChan chan int) {
 		log.Fatal(err)
 	}
 	// log.Println(fstr)
-	// time.Sleep(5 * time.Second)
 	_, ok := <-ccChan
 	if ok {
 		conn.Close(context.Background())
