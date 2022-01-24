@@ -90,13 +90,17 @@ func startExample() {
 	// Create a table and insert a row
 	url := fmt.Sprintf("%s&load_balance=true", baseUrl)
 	fmt.Printf("Using connection url: %s\n", url)
+	pause()
 	createTable(url)
 	verifyZoneList(map[string]map[string][]string{host: {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"}}})
 	printAZInfo()
 	pause()
 
 	// make connections using the url via different go routines and check load balance
-	executeQueries(url, "---- Querying all servers ...")
+	executeQueries(url)
+	if interactive {
+		fmt.Println("You can verify the connection counts on http://127.0.0.1:13000/rpcz and similar urls for other servers.")
+	}
 	pause()
 	closeConns(numconns)
 
@@ -110,7 +114,7 @@ func startExample() {
 		log.Fatalf("Could not add a YBDB server: %s", errout)
 	}
 	time.Sleep(5 * time.Second)
-	executeQueries(url, "---- Querying all servers after adding the new server ...")
+	executeQueries(url)
 	verifyZoneList(map[string]map[string][]string{host: {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"},
 		"cloud1.datacenter1.rack2": {"127.0.0.4"}}})
 	printAZInfo()
@@ -125,32 +129,23 @@ func startExample() {
 	if err != nil {
 		log.Fatalf("Could not stop the YBDB server: %s", errout)
 	}
-	executeQueries(url, "---- Querying all servers after stopping server 2 ...")
+	executeQueries(url)
 	connCnt := numconns / 3
 	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt})
-	if interactive {
-		fmt.Println("You can verify the connection count on http://127.0.0.4:13000/rpcz and similar urls for other servers.")
-	}
 	pause()
 
 	// create new connections via go routines to new placement zone and check load balance
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
-	fmt.Printf("Using connection url %s\n", url)
-	executeQueries(url, "---- Querying all servers in rack2 ...")
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url)
 	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt + numconns})
-	if interactive {
-		fmt.Println("You can verify the connection count on http://127.0.0.4:13000/rpcz and similar urls for other servers.")
-	}
 	pause()
 
 	// create new connections to both the zones and check load balance
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack1,cloud1.datacenter1.rack2", baseUrl)
-	fmt.Printf("Using connection url %s\n", url)
-	executeQueries(url, "---- Querying all servers in rack1 and rack2 ...")
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url)
 	verifyLoad(map[string]int{"127.0.0.1": connCnt + (numconns / 2), "127.0.0.2": 0, "127.0.0.3": connCnt + (numconns / 2), "127.0.0.4": connCnt + numconns})
-	if interactive {
-		fmt.Println("You can verify the connection count on http://127.0.0.1:13000/rpcz and similar urls for other servers.")
-	}
 	pause()
 	closeConns(3 * numconns)
 	fmt.Println("Closing the application ...")
@@ -212,7 +207,7 @@ func verifyZoneList(expected map[string]map[string][]string) {
 func pause() {
 	if interactive {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("Press Enter/return to proceed: ")
+		fmt.Print("\nPress Enter/return to proceed: ")
 		reader.ReadString('\n')
 	}
 }
@@ -248,7 +243,7 @@ func createTable(url string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Exec for create table failed: %v\n", err)
 	}
-	fmt.Printf("Inserted data: %s\n", insertStmt)
+	// fmt.Printf("Inserted data: %s\n", insertStmt)
 
 	// Read from the table.
 	var name, language string
@@ -273,9 +268,8 @@ func createTable(url string) {
 	printHostLoad()
 }
 
-func executeQueries(url string, msg string) {
-	fmt.Println(msg)
-	fmt.Printf("Creating %d connections across different Go routines\n", numconns)
+func executeQueries(url string) {
+	fmt.Printf("Creating %d connections ...\n", numconns)
 	for i := 0; i < numconns; i++ {
 		go executeQuery("GO Routine "+strconv.Itoa(i), url, connCloseChan)
 	}
@@ -330,9 +324,9 @@ func printHostLoad() {
 
 func printAZInfo() {
 	for k, zl := range pgx.GetAZInfo() {
-		str := "AZ details of cluster (" + k + "): "
+		str := "Placement info details of cluster (" + k + "): "
 		for z, hosts := range zl {
-			str = str + fmt.Sprintf("\nAZ [%s]: ", z)
+			str = str + fmt.Sprintf("\n    AZ [%s]: ", z)
 			for _, s := range hosts {
 				str = str + fmt.Sprintf("%s, ", s)
 			}

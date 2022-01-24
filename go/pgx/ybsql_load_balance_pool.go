@@ -21,13 +21,15 @@ var wg sync.WaitGroup
 func startPoolExample() {
 	// Create a table and insert a row
 	url := fmt.Sprintf("%s&load_balance=true", baseUrl)
+	pause()
 	initPool(url)
 	defer pool.Close()
 	createTableUsingPool(url)
 	printAZInfo()
+	pause()
 
 	// make connections using the url via different go routines and check load balance
-	executeQueriesOnPool("---- Querying all servers ...")
+	executeQueriesOnPool()
 	pause()
 
 	// add a server with a different placement zone
@@ -40,8 +42,8 @@ func startPoolExample() {
 		log.Fatalf("Could not add a YBDB server: %s", errout)
 	}
 	time.Sleep(5 * time.Second)
-	numGoRoutines = 10
-	executeQueriesOnPool("---- Querying all servers after adding the new server ...")
+	numGoRoutines = 12
+	executeQueriesOnPool()
 	printAZInfo()
 	pause()
 
@@ -53,15 +55,15 @@ func startPoolExample() {
 	if err != nil {
 		log.Fatalf("Could not stop a YBDB server: %s", errout)
 	}
-	executeQueriesOnPool("---- Querying all servers after stopping server 2 ...")
+	executeQueriesOnPool()
 	pause()
 
 	// create a new pool to a new placement zone and check load balance
-	pool.Close()
+	// pool.Close()
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
 	initPool(url)
-	executeQueriesOnPool("---- Querying all servers in rack2 with a new pool ...")
-	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": numGoRoutines})
+	executeQueriesOnPool()
+	verifyLoad(map[string]int{"127.0.0.1": 4, "127.0.0.2": 0, "127.0.0.3": 4, "127.0.0.4": numGoRoutines + 4})
 	pause()
 
 	fmt.Println("Closing the application ...")
@@ -77,7 +79,7 @@ func initPool(url string) {
 }
 
 func createTableUsingPool(url string) {
-	fmt.Println("Creating table ...")
+	fmt.Println("Creating table using pool.Acquire() ...")
 	conn, err := pool.Acquire(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
@@ -107,7 +109,7 @@ func createTableUsingPool(url string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Exec for create table failed: %v\n", err)
 	}
-	fmt.Printf("Inserted data: %s\n", insertStmt)
+	// fmt.Printf("Inserted data: %s\n", insertStmt)
 
 	// Read from the table.
 	var name, language string
@@ -130,9 +132,8 @@ func createTableUsingPool(url string) {
 	printHostLoad()
 }
 
-func executeQueriesOnPool(msg string) {
-	fmt.Println(msg)
-	fmt.Printf("Acquiring %d connections across different Go routines\n", numGoRoutines)
+func executeQueriesOnPool() {
+	fmt.Printf("Acquiring %d connections from pool ...\n", numGoRoutines)
 	for i := 0; i < numGoRoutines; i++ {
 		wg.Add(1)
 		go executeQueryOnPool("GO Routine " + strconv.Itoa(i))
