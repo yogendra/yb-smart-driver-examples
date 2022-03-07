@@ -37,3 +37,9 @@ Tests & examples regarding the Python driver with load_balancing feature will be
 |✅| [Pool] Create a pool of connections to the cluster using available APIs and using the above url/properties.                                  | | |
 || [Pool] Bring down s4 and increase the number of connections in the pool.                                                                     | | |
 
+# Miscellanous Test Cases
+
+|Done|Name|Notes|File|
+| - | - | - | - |
+|✅| Start a yugabyte cluster with non-default port for YSQL `./bin/yugabyted start --ysql_port 5544`.Do not specify port in url and properties when connecting to the cluster| The application fails to connect to the cluster | |
+|✅| Do not specify port in url and properties when connecting to the cluster. | The application still is able to connect with the cluster | |

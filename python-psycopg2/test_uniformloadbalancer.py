@@ -9,7 +9,7 @@ import time
 
 que = queue.Queue()
 
-class TestSum(unittest.TestCase):
+class TestUniformLoadBalancer(unittest.TestCase):
 
     yb_path = ''
 
@@ -29,6 +29,7 @@ class TestSum(unittest.TestCase):
         for conn in conns:
             conn.close()
         conns.clear()
+        os.system(self.yb_path+'/bin/yb-ctl destroy')
     
     def test_2(self):
         self.setup()
