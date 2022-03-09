@@ -3,7 +3,7 @@
 
 - Clone this repo since the changes are currently in this repo's branch.
 
-  `git clone git@github.com:ashetkar/pgx.git -b pgxpool_load_balance`
+  `git clone git@github.com:ashetkar/pgx.git -b load_balance`
 
 - Clone this repository
 
