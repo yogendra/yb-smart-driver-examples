@@ -27,6 +27,8 @@ var ybInstallPath string
 var connCloseChan chan int = make(chan int)
 var baseUrl string = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?refresh_interval=0",
 	user, password, host, port, dbname)
+var baseLocalhostUrl = fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?refresh_interval=0",
+	user, password, port, dbname)
 var interactive bool = false
 var usePool bool = false
 
@@ -148,6 +150,14 @@ func startExample() {
 	verifyLoad(map[string]int{"127.0.0.1": connCnt + (numconns / 2), "127.0.0.2": 0, "127.0.0.3": connCnt + (numconns / 2), "127.0.0.4": connCnt + numconns})
 	pause()
 	closeConns(3 * numconns)
+
+	url = fmt.Sprintf("%s&load_balance=true", baseLocalhostUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url)
+	verifyLoad(map[string]int{"127.0.0.1": (numconns / 3), "127.0.0.2": 0, "127.0.0.3": (numconns / 3), "127.0.0.4": (numconns / 3)})
+	pause()
+	closeConns(numconns)
+
 	fmt.Println("Closing the application ...")
 }
 

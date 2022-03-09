@@ -47,6 +47,7 @@ func startPoolExample() {
 	printAZInfo()
 	pause()
 
+	aThirdOfTotal := numGoRoutines / 3
 	// bring down a server and create new connections via go routines. check load balance
 	fmt.Println("Stopping server 2 ...")
 	cmd = exec.Command(ybInstallPath+"/bin/yb-ctl", "stop_node", "2")
@@ -56,6 +57,7 @@ func startPoolExample() {
 		log.Fatalf("Could not stop a YBDB server: %s", errout)
 	}
 	executeQueriesOnPool()
+	verifyLoad(map[string]int{"127.0.0.1": aThirdOfTotal, "127.0.0.2": 0, "127.0.0.3": aThirdOfTotal, "127.0.0.4": aThirdOfTotal})
 	pause()
 
 	// create a new pool to a new placement zone and check load balance
@@ -63,9 +65,21 @@ func startPoolExample() {
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
 	initPool(url)
 	executeQueriesOnPool()
-	verifyLoad(map[string]int{"127.0.0.1": 4, "127.0.0.2": 0, "127.0.0.3": 4, "127.0.0.4": numGoRoutines + 4})
+	verifyLoad(map[string]int{"127.0.0.1": aThirdOfTotal, "127.0.0.2": 0, "127.0.0.3": aThirdOfTotal, "127.0.0.4": (aThirdOfTotal + numGoRoutines)})
 	pause()
 
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack1", baseLocalhostUrl)
+	fmt.Println("Closing the pool ...")
+	pool.Close()
+	time.Sleep(2 * time.Second)
+	verifyLoad(map[string]int{"127.0.0.1": aThirdOfTotal, "127.0.0.2": 0, "127.0.0.3": aThirdOfTotal, "127.0.0.4": aThirdOfTotal})
+	initPool(url)
+	executeQueriesOnPool()
+	expectedConns := aThirdOfTotal + (numGoRoutines / 2)
+	verifyLoad(map[string]int{"127.0.0.1": expectedConns, "127.0.0.2": 0, "127.0.0.3": expectedConns, "127.0.0.4": aThirdOfTotal})
+	pause()
+
+	pool.Close()
 	fmt.Println("Closing the application ...")
 }
 
@@ -139,8 +153,8 @@ func executeQueriesOnPool() {
 		go executeQueryOnPool("GO Routine " + strconv.Itoa(i))
 	}
 	time.Sleep(1 * time.Second)
-	printHostLoad()
 	wg.Wait()
+	printHostLoad()
 }
 
 func executeQueryOnPool(grid string) {
