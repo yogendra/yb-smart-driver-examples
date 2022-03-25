@@ -1,7 +1,8 @@
 
 ## Pre-requisites
 
-- Make sure you have YugabyteDB installed on the local file system.
+- Make sure you have YugabyteDB installed on your local system.
+- Go version 1.11+
 
 ## Steps
 
