@@ -1,22 +1,20 @@
 
+## Pre-requisites
+
+- Make sure you have YugabyteDB installed on the local file system.
+
 ## Steps
-
-- Clone this repo since the changes are currently in this repo's branch.
-
-  `git clone git@github.com:ashetkar/pgx.git -b load_balance`
 
 - Clone this repository
 
-  `git clone git@github.com:yugabyte/driver-examples.git -b pgx_load_balance`
+  `git clone git@github.com:yugabyte/driver-examples.git`
 
 - Move to the directory `go/pgx` in this repo and setup the modules
 
   ```
   cd driver-examples/go/pgx
   go mod init main
-  echo "replace github.com/yugabyte/pgx/v4 v4.14.1 => ../../../pgx" >> go.mod
-  go get github.com/yugabyte/pgx/v4@v4.14.1
-  go get github.com/yugabyte/pgx/v4/pgxpool@v4.14.1
+  go mod tidy
   ```
 
 - Build the example
