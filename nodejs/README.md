@@ -12,105 +12,24 @@ cd node-postgres
 ```
 npm install 
 ```
-### 2. To verify the Load Balance feature of the smart-driver 
+### 2. To verify the Smart-driver features of the smart-driver 
 - Get this example locally using:
-    ```
-    git clone -b nodejs-driver-example https://github.com/yugabyte/driver-examples.git
-    ```
-    and go to the nodejs examples folder:
-    ```
-    cd driver-examples/nodejs
-    ```
-- Now, in the `example.js` file change the path for smart-driver package with the relative path of your local smart-driver clone in the require function in the following line - 
 ```
-const pg = require('./node-postgres/packages/pg');
+git clone -b nodejs-driver-example https://github.com/yugabyte/driver-examples.git
 ```
-- Get your YugabyteDB cluster up with replication factor 3 using the following command:
+- Go to the nodejs directory and install dependencies:
 ```
-./bin/yb-ctl create --rf 3
+cd driver-examples/nodejs && npm install
 ```
-- Before running example, verify your URL in the example your cluster configuration.:
-    ```
-    const yburl = "postgresql://<user>:<password>@<host>:<port>/<db>?load_balance=true";
-    ```
-- Run the example using: 
-    ```
-    node example.js
-    ```
-    1. You will get this output:
-        ```
-        Node connection counts after making connections: 
-    
-     		 Map(3) { '127.0.0.1' => 3, '127.0.0.2' => 3, '127.0.0.3' => 4 }
-        ```
-    2. You will then prompted with a quesiton to end connection, it will give this output after that pressing `enter`:
-        ```
-        Node connection counts after ending the connections: 
-    
-     		 Map(3) { '127.0.0.1' => 0, '127.0.0.2' => 0, '127.0.0.3' => 0 } 
-        ```
-    3. You will again prompted with a quesiton to stop a node and proceed next iteration for which first stop node using command:
-        ```
-        ./bin/yb-ctl stop_node 2
-        ```
-       after stopping node, press `enter` to create next set of connections which will give this as output:
-       ```
-       Node connection counts after some node is down and connections are made: 
-
- 		 Map(2) { '127.0.0.1' => 5, '127.0.0.3' => 5 } 
-       ```
-         Note - The Map in each output shows the connection count of each node after creating/closing the connections.
-### 3. To verify the Topology Aware Feature of smart-driver 
-- Destroy the cluster using:
+- Now, before running the example change the path for smart-driver package with the relative path of your local smart-driver clone in the require function in the following line in all the examples - 
 ```
-./bin/yb-ctl destroy
+const pg = require('../../../node-postgres/packages/pg');
 ```
-- Create new Cluster using placement info:
+- Export environment variable as `YB_PATH` with the value of the relative path of your YugabyteDB installation directory.
 ```
-./bin/yb-ctl create --rf 3 --placement_info "cloud1.datacenter1.rack1,cloud1.datacenter1.rack1,cloud1.datacenter1.rack2"
+export YB_PATH = '<relative_path_to_the_YB_installation>'
 ```
-- Now, change the URL of connection string in the example to use the `topology keys` by commenting line 6 and uncommenting line 7.
-- Verfiy the URL given in the example your cluster configuration.
-- Run the example using: 
-    ```
-    node example.js
-    ```
-    1. You will get this output:
-        ```
-       Node connection counts after making connections: 
-
- 		 Map(3) { '127.0.0.2' => 5, '127.0.0.1' => 5, '127.0.0.3' => 0 } 
-        ```
-    2. You will then prompted with a quesiton to end connection, it will give this output after that pressing `enter`:
-        ```
-        Node connection counts after ending the connections: 
-    
-     		 Map(3) { '127.0.0.1' => 0, '127.0.0.2' => 0, '127.0.0.3' => 0 } 
-        ```
-    3. You will again prompted with a quesiton to stop a node and proceed next iteration for which first stop node using command:
-        ```
-        ./bin/yb-ctl stop_node 2
-        ```
-       after stopping node, press `enter` to create next set of connections which will give this as output:
-       ```
-       Node connection counts after some node is down and connections are made: 
-
- 		 Map(2) { '127.0.0.1' => 10, '127.0.0.3' => 0 } 
-       ```
-       
-Note - The Map in each output shows the connection count of each node after creating/closing the connections.  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- Run the example from the respective example directory for both `load-balance` and `topology-aware` using:
+```
+node <example_name>.js
+```
