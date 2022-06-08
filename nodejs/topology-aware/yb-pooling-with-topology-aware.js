@@ -12,10 +12,10 @@ function createPool(){
         password: 'yugabyte',
         host: 'localhost',
         port: 5433,
-        load_balance: true,
+        loadBalance: true,
         database: 'yugabyte',
         max: 100,
-        topology_keys:'cloud1.datacenter1.rack1'
+        topologyKeys:'cloud1.datacenter1.rack1'
     })
     return pool
 }
@@ -53,7 +53,6 @@ function example(){
             const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "3", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter1.rack1,cloud1.datacenter1.rack2"]);
             console.log("Creating cluster with RF 3 with two different placement infos..")
             createCluster.on('close', async (code) => {
-                console.log(code, code === 0)
                 if(code === 0){
 
                     let numConnections = 12
@@ -61,7 +60,7 @@ function example(){
                     let timeToEndConnections = numConnections * 50;
                     console.log("Creating pool of max 100 connections..")
                     let pool = createPool();
-                    console.log("Creating", numConnections, "connections  out of pool with topology_key which matches with two nodes in the cluster...");
+                    console.log("Creating", numConnections, "connections  out of pool with topology key which matches with two nodes in the cluster...");
                     await createNumConnections(numConnections, pool)
                 
                     setTimeout(async () => {

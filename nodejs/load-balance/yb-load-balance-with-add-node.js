@@ -6,7 +6,7 @@ var assert = require('assert');
 const yb_path = process.env.YB_PATH;
 
 async function createConnection(){
-    const yburl = "postgresql://yugabyte:yugabyte@localhost:5433/yugabyte?load_balance=true"
+    const yburl = "postgresql://yugabyte:yugabyte@localhost:5433/yugabyte?loadBalance=true"
     let client = new pg.Client(yburl);
     client.on('error', () => {
         // ignore the error and handle exiting 
@@ -57,9 +57,9 @@ function example(){
         
                     let clientArray = []
                     let numConnections = 12
-                    let timeToMakeConnections = numConnections * 200;
+                    let timeToMakeConnections = numConnections * 400;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating",numConnections, "connections with load_balance");
+                    console.log("Creating",numConnections, "connections with load balance");
                     clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {

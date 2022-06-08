@@ -6,7 +6,7 @@ const pg = require('../../../node-postgres/packages/pg');
 const yb_path = process.env.YB_PATH;
 
 async function createConnection(){
-    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?load_balance=true&&topology_keys=cloud1.datacenter1.rack1"
+    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter1.rack1"
     let client = new pg.Client(yburl);
     client.on('error', () => {
         // ignore the error and handle exiting 
@@ -58,7 +58,7 @@ function example(){
                     let numConnections = 12
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating",numConnections, "connections with one topology_key which matches with two nodes in the cluster");
+                    console.log("Creating",numConnections, "connections with one topology key which matches with two nodes in the cluster");
                     clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {

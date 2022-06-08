@@ -12,7 +12,7 @@ function createPool(){
         password: 'yugabyte',
         host: 'localhost',
         port: 5433,
-        load_balance: true,
+        loadBalance: true,
         database: 'yugabyte',
         max: 100
     })
@@ -59,7 +59,7 @@ function example(){
                     let timeToEndConnections = numConnections * 50;
                     console.log("Creating pool of max 100 connections..")
                     let pool = createPool();
-                    console.log("Creating",numConnections, "connections with load_balance out of that pool..");
+                    console.log("Creating",numConnections, "connections with load balance out of that pool..");
                     await createNumConnections(numConnections, pool)
                 
                     setTimeout(async () => {
