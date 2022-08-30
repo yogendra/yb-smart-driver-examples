@@ -2,7 +2,7 @@
 ### 1. Getting the smart-driver locally installed 
 - Clone the repository using:
 ```
-git clone -b smart-driver-feature https://github.com/yugabyte/node-postgres.git
+git clone https://github.com/yugabyte/node-postgres.git
 ```
 - Go to the `node-postgres` folder using:
 ```
@@ -15,7 +15,7 @@ npm install
 ### 2. To verify the Smart-driver features of the smart-driver 
 - Get this example locally using:
 ```
-git clone -b nodejs-driver-example https://github.com/yugabyte/driver-examples.git
+git clone https://github.com/yugabyte/driver-examples.git
 ```
 - Go to the nodejs directory and install dependencies:
 ```

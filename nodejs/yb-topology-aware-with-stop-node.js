@@ -1,12 +1,12 @@
 const { spawn } = require("child_process");
-const pg = require('../../../node-postgres/packages/pg');
 const process = require('process')
 var assert = require('assert');
+const pg = require('../../node-postgres/packages/pg');
 
 const yb_path = process.env.YB_PATH;
 
 async function createConnection(){
-    const yburl = "postgresql://yugabyte:yugabyte@localhost:5433/yugabyte?loadBalance=true"
+    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter1.rack1"
     let client = new pg.Client(yburl);
     client.on('error', () => {
         // ignore the error and handle exiting 
@@ -50,16 +50,15 @@ function example(){
     })
     destroyCluster.on('close', async (code) => {
         if(code === 0){
-            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "3"]);
-            console.log("Creating cluster with RF 3 ..")
+            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "3", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter1.rack1,cloud1.datacenter1.rack2"]);
+            console.log("Creating cluster with RF 3 with two different placement infos..")
             createCluster.on('close', async (code) => {
                 if(code === 0){
-        
                     let clientArray = []
                     let numConnections = 12
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating",numConnections, "connections with load balance");
+                    console.log("Creating",numConnections, "connections with one topology key which matches with two nodes in the cluster");
                     clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {
@@ -69,9 +68,13 @@ function example(){
                         const hosts = connectionMap.keys();
                         for(let value of hosts){
                             let cnt = connectionMap.get(value);
-                            assert.equal(cnt, 4, 'Node '+ value + ' is not balanced');
+                            if(value === '127.0.0.3'){
+                                assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
+                            }else {
+                                 assert.equal(cnt, 6, 'Node '+ value + ' is not balanced');
+                            }
                         }
-                        console.log("Nodes are all load Balanced!")
+                        console.log("Nodes are all load Balanced on only two nodes matching with placement info mentioned in topology key.")
 
                         await endNumConnections(numConnections, clientArray);
                         setTimeout(async() => {
@@ -98,9 +101,13 @@ function example(){
                                     const hosts = connectionMap.keys();
                                     for(let value of hosts){
                                         let cnt = connectionMap.get(value);
-                                        assert.equal(cnt, 6, 'Node '+ value + 'is not balanced');
+                                        if(value === '127.0.0.3'){
+                                            assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
+                                        }else {
+                                             assert.equal(cnt, 12, 'Node '+ value + ' is not balanced');
+                                        }
                                     }
-                                    console.log("Nodes are all load Balanced after stopping node 1.")
+                                    console.log("All connections made to only one node which has same placement info as mentioned in topology keys after stopping node 1 of same placement info.")
                                 }, timeToMakeConnections)
                                }
                             })

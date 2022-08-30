@@ -1,6 +1,6 @@
 const { spawn } = require("child_process");
-const pg = require('../../../node-postgres/packages/pg');
-const Pool = require('../../../node-postgres/packages/pg-pool')
+const pg = require('../../node-postgres/packages/pg/lib');
+const Pool = require('../../node-postgres/packages/pg-pool')
 const process = require('process')
 var assert = require('assert');
 

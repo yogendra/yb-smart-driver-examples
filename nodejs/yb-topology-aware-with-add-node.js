@@ -1,44 +1,44 @@
 const { spawn } = require("child_process");
-const pg = require('../../../node-postgres/packages/pg/lib');
-const Pool = require('../../../node-postgres/packages/pg-pool')
+const pg = require('../../node-postgres/packages/pg');
 const process = require('process')
 var assert = require('assert');
 
 const yb_path = process.env.YB_PATH;
 
-function createPool(){
-    let pool = new Pool({
-        user: 'yugabyte',
-        password: 'yugabyte',
-        host: 'localhost',
-        port: 5433,
-        loadBalance: true,
-        database: 'yugabyte',
-        max: 100,
-        topologyKeys:'cloud1.datacenter1.rack1'
+async function createConnection(){
+    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter1.rack1"
+    let client = new pg.Client(yburl);
+    client.on('error', () => {
+        // ignore the error and handle exiting 
     })
-    return pool
+    await client.connect()
+    client.connection.on('error', () => {
+        // ignore the error and handle exiting 
+    })
+    return client;
 }
 
-async function createNumConnections(numConnections, pool) {
-    for(let i=0;i<numConnections;i++){
+async function createNumConnections(numConnections) {
+    let clientArray = []
+    for (let i=0; i<numConnections; i++) {
         if(i&1){
-            await pool.connect();
-        }else{
-            setTimeout(async () => {
-                await pool.connect();
-            },2000)
+             clientArray.push(await createConnection())
+        }else  {
+            setTimeout(async() => {
+                clientArray.push(await createConnection())
+            }, 1000)
         }
     }
+    return clientArray
 }
 
-function endNumConnections(numConnections, pool){
+async function endNumConnections(numConnections, clientArray){
     for (let i=0; i<numConnections; i++) {
-        pool._clients[i].on('error',()=>{})
-        pool._clients[i].connection.on('error',()=>{})
-    }
-    for (let i=0; i<numConnections; i++) {
-        pool._clients[i].end();
+        await clientArray[i].end((err) => {
+            if(err){}
+            else {
+            }
+        })
     }
 }
 
@@ -54,18 +54,16 @@ function example(){
             console.log("Creating cluster with RF 3 with two different placement infos..")
             createCluster.on('close', async (code) => {
                 if(code === 0){
-
+                    let clientArray = []
                     let numConnections = 12
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating pool of max 100 connections..")
-                    let pool = createPool();
-                    console.log("Creating", numConnections, "connections  out of pool with topology key which matches with two nodes in the cluster...");
-                    await createNumConnections(numConnections, pool)
+                    console.log("Creating",numConnections, "connections with one topology key which matches with two nodes in the cluster");
+                    clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {
                         console.log(numConnections, "connections are created!");
-                        let connectionMap = pool.Client.connectionMap;
+                        let connectionMap = pg.Client.connectionMap;
                         console.log("Connection Map: ", connectionMap)
                         const hosts = connectionMap.keys();
                         for(let value of hosts){
@@ -78,9 +76,9 @@ function example(){
                         }
                         console.log("Nodes are all load Balanced on only two nodes matching with placement info mentioned in topology key.")
 
-                        endNumConnections(numConnections, pool);
+                        await endNumConnections(numConnections, clientArray);
                         setTimeout(async() => {
-                            let connectionMap = pool.Client.connectionMap;
+                            let connectionMap = pg.Client.connectionMap;
                             console.log("Connection Map: ", connectionMap)
                             const hosts = connectionMap.keys();
                             for(let value of hosts){
@@ -89,7 +87,7 @@ function example(){
                             }
                             console.log("All connections are closed!")
 
-                            const addOneNode = spawn("./bin/yb-ctl", ["add_node", "--placement_info", "cloud1.datacenter1.rack1"])
+                            const addOneNode = spawn("./bin/yb-ctl", ["add_node" , "--placement_info", "cloud1.datacenter1.rack1"])
                             addOneNode.stdout.on("data", () => {
                                 console.log("Adding one node with same placement info as we are specifying in topology key ... ")
                             })
@@ -97,10 +95,10 @@ function example(){
                                if(code === 0){
                                 setTimeout(async () => {
                                     pg.Client.doHardRefresh = true;   
-                                    await createNumConnections(numConnections, pool)
+                                    clientArray = await createNumConnections(numConnections)
                                     setTimeout(() => {
                                         console.log(numConnections, "connections are created after adding one node.");
-                                        let connectionMap = pool.Client.connectionMap;
+                                        let connectionMap = pg.Client.connectionMap;
                                         console.log("Connection Map: ", connectionMap)
                                         const hosts = connectionMap.keys();
                                         for(let value of hosts){
@@ -111,15 +109,13 @@ function example(){
                                                  assert.equal(cnt, 4, 'Node '+ value + ' is not balanced');
                                             }
                                         }
-                                        console.log("Nodes are all load Balanced across three nodes after adding node of same placement info.")
+                                        console.log("Nodes are all load Balanced across three nodes after adding node with same placement info.")
                                     }, timeToMakeConnections)
                                 }, 1000)
                                }
                             })
                         },timeToEndConnections)
-                    }, timeToMakeConnections)
-                
-                    
+                    }, timeToMakeConnections)  
                 }
             })
         }

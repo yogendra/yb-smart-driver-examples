@@ -1,5 +1,5 @@
 const { spawn } = require("child_process");
-const pg = require('../../../node-postgres/packages/pg');
+const pg = require('../../node-postgres/packages/pg');
 const process = require('process')
 var assert = require('assert');
 
@@ -57,7 +57,7 @@ function example(){
         
                     let clientArray = []
                     let numConnections = 12
-                    let timeToMakeConnections = numConnections * 400;
+                    let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
                     console.log("Creating",numConnections, "connections with load balance");
                     clientArray = await createNumConnections(numConnections)
@@ -84,27 +84,24 @@ function example(){
                             }
                             console.log("All connections are closed!")
 
-                            const addOneNode = spawn("./bin/yb-ctl", ["add_node"])
-                            addOneNode.stdout.on("data", () => {
-                                console.log("Adding one node ... ")
+                            const stopOneNode = spawn("./bin/yb-ctl", ["stop_node", "1"])
+                            stopOneNode.stdout.on("data", () => {
+                                console.log("Stopping node with host IP - 127.0.0.1")
                             })
-                            addOneNode.on('close', async (code) => {
+                            stopOneNode.on('close', async (code) => {
                                if(code === 0){
-                                setTimeout(async () => {
-                                    pg.Client.doHardRefresh = true;   
-                                    clientArray = await createNumConnections(numConnections)
-                                    setTimeout(() => {
-                                        console.log(numConnections, "connections are created after adding one node!");
-                                        let connectionMap = pg.Client.connectionMap;
-                                        console.log("Connection Map: ", connectionMap)
-                                        const hosts = connectionMap.keys();
-                                        for(let value of hosts){
-                                            let cnt = connectionMap.get(value);
-                                            assert.equal(cnt, 3, 'Node '+ value + 'is not balanced');
-                                        }
-                                        console.log("Nodes are all load Balanced after adding node!")
-                                    }, timeToMakeConnections)
-                                }, 1000)
+                                clientArray = await createNumConnections(numConnections)
+                                setTimeout(() => {
+                                    console.log(numConnections, "connections are created after stopping node 1.");
+                                    let connectionMap = pg.Client.connectionMap;
+                                    console.log("Connection Map: ", connectionMap)
+                                    const hosts = connectionMap.keys();
+                                    for(let value of hosts){
+                                        let cnt = connectionMap.get(value);
+                                        assert.equal(cnt, 6, 'Node '+ value + 'is not balanced');
+                                    }
+                                    console.log("Nodes are all load Balanced after stopping node 1.")
+                                }, timeToMakeConnections)
                                }
                             })
                         },timeToEndConnections)
