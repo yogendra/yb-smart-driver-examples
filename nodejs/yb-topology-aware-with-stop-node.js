@@ -1,8 +1,7 @@
 const { spawn } = require("child_process");
 const process = require('process')
 var assert = require('assert');
-const pg = require('../../node-postgres/packages/pg');
-
+const pg = require('@yugabytedb/pg');
 const yb_path = process.env.YB_PATH;
 
 async function createConnection(){

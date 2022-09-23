@@ -1,5 +1,5 @@
 const { spawn } = require("child_process");
-const pg = require('../../node-postgres/packages/pg');
+const pg = require('@yugabytedb/pg');
 const process = require('process')
 var assert = require('assert');
 

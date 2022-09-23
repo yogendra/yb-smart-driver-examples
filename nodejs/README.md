@@ -1,17 +1,13 @@
 # Follow the steps to run this example - 
-### 1. Getting the smart-driver locally installed 
-- Clone the repository using:
+### 1. Install the smart-driver package
 ```
-git clone https://github.com/yugabyte/node-postgres.git
+npm install @yugabytedb/pg
 ```
-- Go to the `node-postgres` folder using:
+### 1. Install the smart-driver Pool package
 ```
-cd node-postgres
+npm install @yugabytedb/pg-pool
 ```
-- Install the node dependencies:
-```
-npm install 
-```
+
 ### 2. To verify the Smart-driver features of the smart-driver 
 - Get this example locally using:
 ```
@@ -20,10 +16,6 @@ git clone https://github.com/yugabyte/driver-examples.git
 - Go to the nodejs directory and install dependencies:
 ```
 cd driver-examples/nodejs && npm install
-```
-- Now, before running the example change the path for smart-driver package with the relative path of your local smart-driver clone in the require function in the following line in all the examples - 
-```
-const pg = require('../../../node-postgres/packages/pg');
 ```
 - Export environment variable as `YB_PATH` with the value of the relative path of your YugabyteDB installation directory.
 ```
