@@ -20,7 +20,7 @@ const (
 	user     = "yugabyte"
 	password = "yugabyte"
 	dbname   = "yugabyte"
-	numconns = 12
+	numconns = 84
 )
 
 var ybInstallPath string
@@ -116,45 +116,105 @@ func startExample() {
 		log.Fatalf("Could not add a YBDB server: %s", errout)
 	}
 	time.Sleep(5 * time.Second)
+
+	fmt.Println("Adding a new server in zone rack3 ...")
+	var errout1 bytes.Buffer
+	cmd1 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter1.rack3")
+	cmd1.Stderr = &errout1
+	err1 := cmd1.Run()
+	if err1 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
+	fmt.Println("Adding a new server in zone datacenter2 rack1...")
+	var errout2 bytes.Buffer
+	cmd2 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter2.rack1")
+	cmd2.Stderr = &errout2
+	err2 := cmd2.Run()
+	if err2 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
+	fmt.Println("Adding a new server in zone datacenter2 rack2...")
+	var errout3 bytes.Buffer
+	cmd3 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter2.rack2")
+	cmd3.Stderr = &errout3
+	err3 := cmd3.Run()
+	if err3 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
+	fmt.Println("Adding a new server in zone datacenter2 rack3...")
+	var errout4 bytes.Buffer
+	cmd4 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter2.rack3")
+	cmd4.Stderr = &errout4
+	err4 := cmd4.Run()
+	if err4 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
 	executeQueries(url)
 	verifyZoneList(map[string]map[string][]string{host: {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"},
-		"cloud1.datacenter1.rack2": {"127.0.0.4"}}})
+		"cloud1.datacenter1.rack2": {"127.0.0.4"}, "cloud1.datacenter1.rack3": {"127.0.0.5"}, "cloud1.datacenter2.rack1": {"127.0.0.6"}, "cloud1.datacenter2.rack2": {"127.0.0.7"}, "cloud1.datacenter2.rack3": {"127.0.0.8"}}})
 	printAZInfo()
 	pause()
 	closeConns(numconns)
-
-	// bring down a server and create new connections via go routines. check load balance
-	fmt.Println("Stopping server 2 ...")
-	cmd = exec.Command(ybInstallPath+"/bin/yb-ctl", "stop_node", "2")
-	cmd.Stderr = &errout
-	err = cmd.Run()
-	if err != nil {
-		log.Fatalf("Could not stop the YBDB server: %s", errout)
-	}
-	executeQueries(url)
-	connCnt := numconns / 3
-	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt})
-	pause()
 
 	// create new connections via go routines to new placement zone and check load balance
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
 	fmt.Printf("Using connection url:\n    %s\n", url)
 	executeQueries(url)
-	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt + numconns})
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": numconns, "127.0.0.5": 0, "127.0.0.6": 0, "127.0.0.7": 0, "127.0.0.8": 0})
 	pause()
+	closeConns(numconns)
+
+	// bring down a server and create new connections via go routines. check load balance
+	fmt.Println("Stopping server 4 ...")
+	cmd = exec.Command(ybInstallPath+"/bin/yb-ctl", "stop_node", "4")
+	cmd.Stderr = &errout
+	err = cmd.Run()
+	if err != nil {
+		log.Fatalf("Could not stop the YBDB server: %s", errout)
+	}
+
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
+	executeQueries(url)
+	connCnt := numconns / 7
+	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": connCnt, "127.0.0.3": connCnt, "127.0.0.4": 0, "127.0.0.5": connCnt, "127.0.0.6": connCnt, "127.0.0.7": connCnt, "127.0.0.8": connCnt})
+	pause()
+	closeConns(numconns)
 
 	// create new connections to both the zones and check load balance
-	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack1,cloud1.datacenter1.rack2", baseUrl)
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.rack1:2,cloud1.datacenter1.rack2:1", baseUrl)
 	fmt.Printf("Using connection url:\n    %s\n", url)
 	executeQueries(url)
-	verifyLoad(map[string]int{"127.0.0.1": connCnt + (numconns / 2), "127.0.0.2": 0, "127.0.0.3": connCnt + (numconns / 2), "127.0.0.4": connCnt + numconns})
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": 0, "127.0.0.5": 0, "127.0.0.6": numconns, "127.0.0.7": 0, "127.0.0.8": 0})
 	pause()
-	closeConns(3 * numconns)
+	closeConns(numconns)
 
-	url = fmt.Sprintf("%s&load_balance=true", baseLocalhostUrl)
+	// create new connections to both the zones and check load balance
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.*:2,cloud1.datacenter1.rack2:1", baseUrl)
 	fmt.Printf("Using connection url:\n    %s\n", url)
 	executeQueries(url)
-	verifyLoad(map[string]int{"127.0.0.1": (numconns / 3), "127.0.0.2": 0, "127.0.0.3": (numconns / 3), "127.0.0.4": (numconns / 3)})
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": 0, "127.0.0.5": 0, "127.0.0.6": numconns / 3, "127.0.0.7": numconns / 3, "127.0.0.8": numconns / 3})
+	pause()
+	closeConns(numconns)
+
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.*:2,cloud1.datacenter1.*:1", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url)
+	verifyLoad(map[string]int{"127.0.0.1": numconns / 4, "127.0.0.2": numconns / 4, "127.0.0.3": numconns / 4, "127.0.0.4": 0, "127.0.0.5": numconns / 4, "127.0.0.6": 0, "127.0.0.7": 0, "127.0.0.8": 0})
+	pause()
+	closeConns(numconns)
+
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.rack3:1,cloud1.datacenter1.rack3:1,cloud1.datacenter1.rack1:2,cloud1.datacenter2.rack2:2", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url)
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": 0, "127.0.0.5": numconns / 2, "127.0.0.6": 0, "127.0.0.7": 0, "127.0.0.8": numconns / 2})
 	pause()
 	closeConns(numconns)
 
