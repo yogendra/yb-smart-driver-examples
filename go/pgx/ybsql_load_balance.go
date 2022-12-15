@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yugabyte/pgx/v4"
@@ -20,17 +21,18 @@ const (
 	user     = "yugabyte"
 	password = "yugabyte"
 	dbname   = "yugabyte"
-	numconns = 12
+	numconns = 84
 )
 
 var ybInstallPath string
 var connCloseChan chan int = make(chan int)
-var baseUrl string = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?refresh_interval=0",
+var baseUrl string = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?yb_servers_refresh_interval=0",
 	user, password, host, port, dbname)
-var baseLocalhostUrl = fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?refresh_interval=0",
+var baseLocalhostUrl = fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?yb_servers_refresh_interval=0",
 	user, password, port, dbname)
 var interactive bool = false
 var usePool bool = false
+var errnil error = nil
 
 func main() {
 	if len(os.Args) > 4 || len(os.Args) < 2 {
@@ -99,7 +101,7 @@ func startExample() {
 	pause()
 
 	// make connections using the url via different go routines and check load balance
-	executeQueries(url)
+	executeQueries(url, errnil)
 	if interactive {
 		fmt.Println("You can verify the connection counts on http://127.0.0.1:13000/rpcz and similar urls for other servers.")
 	}
@@ -107,7 +109,7 @@ func startExample() {
 	closeConns(numconns)
 
 	// add a server with a different placement zone
-	fmt.Println("Adding a new server in zone rack2 ...")
+	fmt.Println("Adding a new server in zone datacenter1 rack2...")
 	var errout bytes.Buffer
 	cmd := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter1.rack2")
 	cmd.Stderr = &errout
@@ -116,47 +118,125 @@ func startExample() {
 		log.Fatalf("Could not add a YBDB server: %s", errout)
 	}
 	time.Sleep(5 * time.Second)
-	executeQueries(url)
+
+	fmt.Println("Adding a new server in zone datacenter1 rack3...")
+	var errout1 bytes.Buffer
+	cmd1 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter1.rack3")
+	cmd1.Stderr = &errout1
+	err1 := cmd1.Run()
+	if err1 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
+	fmt.Println("Adding a new server in zone datacenter2 rack1...")
+	var errout2 bytes.Buffer
+	cmd2 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter2.rack1")
+	cmd2.Stderr = &errout2
+	err2 := cmd2.Run()
+	if err2 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
+	fmt.Println("Adding a new server in zone datacenter2 rack2...")
+	var errout3 bytes.Buffer
+	cmd3 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter2.rack2")
+	cmd3.Stderr = &errout3
+	err3 := cmd3.Run()
+	if err3 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
+	fmt.Println("Adding a new server in zone datacenter2 rack3...")
+	var errout4 bytes.Buffer
+	cmd4 := exec.Command(ybInstallPath+"/bin/yb-ctl", "add_node", "--placement_info", "cloud1.datacenter2.rack3")
+	cmd4.Stderr = &errout4
+	err4 := cmd4.Run()
+	if err4 != nil {
+		log.Fatalf("Could not add a YBDB server: %s", errout)
+	}
+	time.Sleep(5 * time.Second)
+
+	executeQueries(url, errnil)
 	verifyZoneList(map[string]map[string][]string{host: {"cloud1.datacenter1.rack1": {"127.0.0.1", "127.0.0.2", "127.0.0.3"},
-		"cloud1.datacenter1.rack2": {"127.0.0.4"}}})
+		"cloud1.datacenter1.rack2": {"127.0.0.4"}, "cloud1.datacenter1.rack3": {"127.0.0.5"}, "cloud1.datacenter2.rack1": {"127.0.0.6"}, "cloud1.datacenter2.rack2": {"127.0.0.7"}, "cloud1.datacenter2.rack3": {"127.0.0.8"}}})
 	printAZInfo()
 	pause()
 	closeConns(numconns)
 
+	// create new connections via go routines to new placement zone and check load balance
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url, errnil)
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": numconns, "127.0.0.5": 0, "127.0.0.6": 0, "127.0.0.7": 0, "127.0.0.8": 0})
+	pause()
+	closeConns(numconns)
+
 	// bring down a server and create new connections via go routines. check load balance
-	fmt.Println("Stopping server 2 ...")
-	cmd = exec.Command(ybInstallPath+"/bin/yb-ctl", "stop_node", "2")
+	fmt.Println("Stopping server 4 ...")
+	cmd = exec.Command(ybInstallPath+"/bin/yb-ctl", "stop_node", "4")
 	cmd.Stderr = &errout
 	err = cmd.Run()
 	if err != nil {
 		log.Fatalf("Could not stop the YBDB server: %s", errout)
 	}
-	executeQueries(url)
-	connCnt := numconns / 3
-	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt})
-	pause()
 
-	// create new connections via go routines to new placement zone and check load balance
 	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack2", baseUrl)
-	fmt.Printf("Using connection url:\n    %s\n", url)
-	executeQueries(url)
-	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": 0, "127.0.0.3": connCnt, "127.0.0.4": connCnt + numconns})
-	pause()
-
-	// create new connections to both the zones and check load balance
-	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter1.rack1,cloud1.datacenter1.rack2", baseUrl)
-	fmt.Printf("Using connection url:\n    %s\n", url)
-	executeQueries(url)
-	verifyLoad(map[string]int{"127.0.0.1": connCnt + (numconns / 2), "127.0.0.2": 0, "127.0.0.3": connCnt + (numconns / 2), "127.0.0.4": connCnt + numconns})
-	pause()
-	closeConns(3 * numconns)
-
-	url = fmt.Sprintf("%s&load_balance=true", baseLocalhostUrl)
-	fmt.Printf("Using connection url:\n    %s\n", url)
-	executeQueries(url)
-	verifyLoad(map[string]int{"127.0.0.1": (numconns / 3), "127.0.0.2": 0, "127.0.0.3": (numconns / 3), "127.0.0.4": (numconns / 3)})
+	executeQueries(url, errnil)
+	connCnt := numconns / 7
+	verifyLoad(map[string]int{"127.0.0.1": connCnt, "127.0.0.2": connCnt, "127.0.0.3": connCnt, "127.0.0.4": 0, "127.0.0.5": connCnt, "127.0.0.6": connCnt, "127.0.0.7": connCnt, "127.0.0.8": connCnt})
 	pause()
 	closeConns(numconns)
+
+	// create new connections to both the zones and check load balance
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.rack1:2,cloud1.datacenter1.rack2:1", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url, errnil)
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": 0, "127.0.0.5": 0, "127.0.0.6": numconns, "127.0.0.7": 0, "127.0.0.8": 0})
+	pause()
+	closeConns(numconns)
+
+	// create new connections to both the zones and check load balance
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.*:2,cloud1.datacenter1.rack2:1", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url, errnil)
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": 0, "127.0.0.5": 0, "127.0.0.6": numconns / 3, "127.0.0.7": numconns / 3, "127.0.0.8": numconns / 3})
+	pause()
+	closeConns(numconns)
+
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.*:2,cloud1.datacenter1.*:1", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url, errnil)
+	verifyLoad(map[string]int{"127.0.0.1": numconns / 4, "127.0.0.2": numconns / 4, "127.0.0.3": numconns / 4, "127.0.0.4": 0, "127.0.0.5": numconns / 4, "127.0.0.6": 0, "127.0.0.7": 0, "127.0.0.8": 0})
+	pause()
+	closeConns(numconns)
+
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.rack3:1,cloud1.datacenter1.rack3:1,cloud1.datacenter1.rack1:2,cloud1.datacenter2.rack2:2", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	executeQueries(url, errnil)
+	verifyLoad(map[string]int{"127.0.0.1": 0, "127.0.0.2": 0, "127.0.0.3": 0, "127.0.0.4": 0, "127.0.0.5": numconns / 2, "127.0.0.6": 0, "127.0.0.7": 0, "127.0.0.8": numconns / 2})
+	pause()
+	closeConns(numconns)
+
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.rack3:,cloud1.datacenter1.rack3:1,cloud1.datacenter1.rack1:2,cloud1.datacenter2.rack2:2", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	zones := strings.Split("cloud1.datacenter2.rack3:", ":")
+	str := "Invalid preference value for " + zones[0] + ": " + zones[1]
+	errnew := fmt.Errorf(str)
+	executeQueries(url, errnew)
+	fmt.Println("Error :", errnew)
+	pause()
+
+	url = fmt.Sprintf("%s&load_balance=true&topology_keys=cloud1.datacenter2.rack3:1,cloud1.datacenter1.rack3:1,cloud1.datacenter1.rack1:a,cloud1.datacenter2.rack2:2", baseUrl)
+	fmt.Printf("Using connection url:\n    %s\n", url)
+	zones = strings.Split("cloud1.datacenter1.rack1:a", ":")
+	str = "Invalid preference value for " + zones[0] + ": " + zones[1]
+	errnew = fmt.Errorf(str)
+	executeQueries(url, errnew)
+	fmt.Println("Error :", errnew)
+	pause()
 
 	fmt.Println("Closing the application ...")
 }
@@ -278,20 +358,26 @@ func createTable(url string) {
 	printHostLoad()
 }
 
-func executeQueries(url string) {
+func executeQueries(url string, err1 error) {
 	fmt.Printf("Creating %d connections ...\n", numconns)
 	for i := 0; i < numconns; i++ {
-		go executeQuery("GO Routine "+strconv.Itoa(i), url, connCloseChan)
+		go executeQuery("GO Routine "+strconv.Itoa(i), url, connCloseChan, err1)
 	}
 	time.Sleep(5 * time.Second)
-	printHostLoad()
+	if err1 == nil {
+		printHostLoad()
+	}
 }
 
-func executeQuery(grid string, url string, ccChan chan int) {
+func executeQuery(grid string, url string, ccChan chan int, err1 error) {
 	conn, err := pgx.Connect(context.Background(), url)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[%s] Unable to connect to database: %v\n", grid, err)
-		os.Exit(1)
+		if err.Error() != err1.Error() {
+			fmt.Fprintf(os.Stderr, "[%s] Unable to connect to database: %v\n", grid, err)
+			os.Exit(1)
+		} else {
+			return
+		}
 	}
 
 	// Read from the table.
