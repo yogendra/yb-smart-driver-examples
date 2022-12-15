@@ -25,9 +25,9 @@ const (
 
 var ybInstallPath string
 var connCloseChan chan int = make(chan int)
-var baseUrl string = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?refresh_interval=0",
+var baseUrl string = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?yb_servers_refresh_interval=0",
 	user, password, host, port, dbname)
-var baseLocalhostUrl = fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?refresh_interval=0",
+var baseLocalhostUrl = fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?yb_servers_refresh_interval=0",
 	user, password, port, dbname)
 var interactive bool = false
 var usePool bool = false
