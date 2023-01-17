@@ -57,7 +57,7 @@ function example(){
                     let numConnections = 12
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating",numConnections, "connections with one topology key which matches with two nodes in the cluster");
+                    console.log("Creating",numConnections, "connections.");
                     clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {
@@ -106,7 +106,7 @@ function example(){
                                              assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
                                         }
                                     }
-                                    console.log("Since all server of preference value 1 are down load goes to the server with preference value 2")
+                                    console.log("Since all server of preference value 1 are down, load goes to the server with preference value 2")
                                 }, timeToMakeConnections)
                                }
                             })

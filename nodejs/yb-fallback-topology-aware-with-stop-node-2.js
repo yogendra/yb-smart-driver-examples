@@ -57,7 +57,7 @@ function example(){
                     let numConnections = 12
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating",numConnections, "connections with one topology key which matches with two nodes in the cluster");
+                    console.log("Creating",numConnections, "connections.");
                     clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {

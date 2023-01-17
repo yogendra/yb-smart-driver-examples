@@ -58,7 +58,7 @@ function example(){
                     let numConnections = 16
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating",numConnections, "connections with one topology key which matches with one nodes in the cluster");
+                    console.log("Creating",numConnections, "connections.");
                     clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {
@@ -109,7 +109,7 @@ function example(){
                                                  assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
                                             }
                                         }
-                                        console.log("Nodes are all load Balanced across three nodes after adding node with same placement info.")
+                                        console.log("Nodes are all load Balanced across two nodes after adding node with same placement info.")
                                     }, timeToMakeConnections)
                                 }, 1000)
                                }
