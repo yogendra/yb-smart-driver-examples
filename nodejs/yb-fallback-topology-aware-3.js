@@ -4,8 +4,9 @@ var assert = require('assert');
 const pg = require('@yugabytedb/pg');
 const yb_path = process.env.YB_PATH;
 
+//Testing load balancing when multiple zones are specified for one preference value.
 async function createConnection(){
-    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter1.rack2:2,cloud1.datacenter2.rack1:1"
+    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter2.rack1:1,cloud1.datacenter1.rack2:1,cloud1.datacenter1.rack1:2"
     let client = new pg.Client(yburl);
     client.on('error', () => {
         // ignore the error and handle exiting 
@@ -49,14 +50,15 @@ function example(){
     })
     destroyCluster.on('close', async (code) => {
         if(code === 0){
-            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "4", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter1.rack2,cloud1.datacenter2.rack1,cloud1.datacenter2.rack2"]);
-            console.log("Creating cluster with RF 4 with 4 different placement infos..")
+            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "3", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter1.rack2,cloud1.datacenter2.rack1"]);
+            console.log("Creating cluster with RF 3 with 3 different placement infos..")
             createCluster.on('close', async (code) => {
                 if(code === 0){
                     let clientArray = []
                     let numConnections = 12
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
+                    console.log("Testing load balancing when multiple zones are specified for one preference value.")
                     console.log("Creating",numConnections, "connections.");
                     clientArray = await createNumConnections(numConnections)
                 
@@ -67,13 +69,13 @@ function example(){
                         const hosts = connectionMap.keys();
                         for(let value of hosts){
                             let cnt = connectionMap.get(value);
-                            if(value === '127.0.0.3'){
-                                assert.equal(cnt, 12, 'Node '+ value + ' is not balanced');
+                            if(value === '127.0.0.2'||value === '127.0.0.3'){
+                                assert.equal(cnt, 6, 'Node '+ value + ' is not balanced');
                             }else {
                                  assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
                             }
                         }
-                        console.log("Nodes are all load Balanced on only one nodes matching with placement info mentioned in topology key with preference value 1.")
+                        console.log("Connections are all load Balanced on 2 nodes matching with placement info mentioned in topology key with preference value 1.")
 
                         await endNumConnections(numConnections, clientArray);
                         setTimeout(async() => {
@@ -106,12 +108,12 @@ function example(){
                                              assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
                                         }
                                     }
-                                    console.log("Since all server of preference value 1 are down load goes to the server with preference value 2")
+                                    console.log("All connections are load balanced to one server.")
                                 }, timeToMakeConnections)
                                }
                             })
                         },timeToEndConnections)
-                    }, timeToMakeConnections)
+                    }, timeToMakeConnections)    
                 }
             })
         }

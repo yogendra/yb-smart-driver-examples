@@ -1,12 +1,12 @@
 const { spawn } = require("child_process");
-const pg = require('@yugabytedb/pg');
 const process = require('process')
 var assert = require('assert');
-
+const pg = require('@yugabytedb/pg');
 const yb_path = process.env.YB_PATH;
 
+//Testing fallback to the entire cluster when all servers specified in topology keys are down.
 async function createConnection(){
-    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter2.rack1&&ybServersRefreshInterval=0"
+    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.2:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter1.rack1"
     let client = new pg.Client(yburl);
     client.on('error', () => {
         // ignore the error and handle exiting 
@@ -50,15 +50,16 @@ function example(){
     })
     destroyCluster.on('close', async (code) => {
         if(code === 0){
-            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "7", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter1.rack1,cloud1.datacenter1.rack2,cloud1.datacenter1.rack3,cloud1.datacenter2.rack1,cloud1.datacenter2.rack2,cloud1.datacenter2.rack3"]);
-            console.log("Creating cluster with RF 7 with 6 different placement infos..")
+            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "3", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter1.rack2,cloud1.datacenter1.rack3"]);
+            console.log("Creating cluster with RF 3 with three different placement infos..")
             createCluster.on('close', async (code) => {
                 if(code === 0){
                     let clientArray = []
-                    let numConnections = 16
+                    let numConnections = 12
                     let timeToMakeConnections = numConnections * 200;
                     let timeToEndConnections = numConnections * 50;
-                    console.log("Creating",numConnections, "connections.");
+                    console.log("Testing fallback to the entire cluster when all servers specified in topology keys are down.")
+                    console.log("Creating",numConnections, "connections with one topology key which matches with one nodes in the cluster");
                     clientArray = await createNumConnections(numConnections)
                 
                     setTimeout(async () => {
@@ -68,8 +69,8 @@ function example(){
                         const hosts = connectionMap.keys();
                         for(let value of hosts){
                             let cnt = connectionMap.get(value);
-                            if(value === '127.0.0.5'){
-                                assert.equal(cnt, 16, 'Node '+ value + ' is not balanced');
+                            if(value === '127.0.0.1'){
+                                assert.equal(cnt, 12, 'Node '+ value + ' is not balanced');
                             }else {
                                  assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
                             }
@@ -87,35 +88,28 @@ function example(){
                             }
                             console.log("All connections are closed!")
 
-                            const addOneNode = spawn("./bin/yb-ctl", ["add_node" , "--placement_info", "cloud1.datacenter2.rack1"])
-                            addOneNode.stdout.on("data", () => {
-                                console.log("Adding one node with same placement info as we are specifying in topology key ... ")
+                            const stopOneNode = spawn("./bin/yb-ctl", ["stop_node", "1"])
+                            stopOneNode.stdout.on("data", () => {
+                                console.log("Stopping node with host IP - 127.0.0.1")
                             })
-                            addOneNode.on('close', async (code) => {
+                            stopOneNode.on('close', async (code) => {
                                if(code === 0){
-                                setTimeout(async () => {
-                                    pg.Client.doHardRefresh = true;   
-                                    clientArray = await createNumConnections(numConnections)
-                                    setTimeout(() => {
-                                        console.log(numConnections, "connections are created after adding one node.");
-                                        let connectionMap = pg.Client.connectionMap;
-                                        console.log("Connection Map: ", connectionMap)
-                                        const hosts = connectionMap.keys();
-                                        for(let value of hosts){
-                                            let cnt = connectionMap.get(value);
-                                            if(value === '127.0.0.5' || value === '127.0.0.8'){
-                                                assert.equal(cnt, 8, 'Node '+ value + ' is not balanced');
-                                            }else {
-                                                 assert.equal(cnt, 0, 'Node '+ value + ' is not balanced');
-                                            }
-                                        }
-                                        console.log("Nodes are all load Balanced across two nodes after adding node with same placement info.")
-                                    }, timeToMakeConnections)
-                                }, 1000)
+                                clientArray = await createNumConnections(numConnections)
+                                setTimeout(() => {
+                                    console.log(numConnections, "connections are created after stopping node 1.");
+                                    let connectionMap = pg.Client.connectionMap;
+                                    console.log("Connection Map: ", connectionMap)
+                                    const hosts = connectionMap.keys();
+                                    for(let value of hosts){
+                                        let cnt = connectionMap.get(value);
+                                        assert.equal(cnt, 6, 'Node '+ value + ' is not balanced');  
+                                    }
+                                    console.log("All connections are distributed among rest of the servers in the cluster when all servers specified in topology keys are down")
+                                }, timeToMakeConnections)
                                }
                             })
                         },timeToEndConnections)
-                    }, timeToMakeConnections)  
+                    }, timeToMakeConnections)
                 }
             })
         }
