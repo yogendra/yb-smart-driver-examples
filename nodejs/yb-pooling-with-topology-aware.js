@@ -15,6 +15,7 @@ function createPool(){
         loadBalance: true,
         database: 'yugabyte',
         max: 100,
+        ybServersRefreshInterval: '0',
         topologyKeys:'cloud1.datacenter1.rack1'
     })
     return pool
@@ -96,7 +97,6 @@ function example(){
                             addOneNode.on('close', async (code) => {
                                if(code === 0){
                                 setTimeout(async () => {
-                                    pg.Client.doHardRefresh = true;   
                                     await createNumConnections(numConnections, pool)
                                     setTimeout(() => {
                                         console.log(numConnections, "connections are created after adding one node.");

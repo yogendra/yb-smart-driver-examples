@@ -6,7 +6,7 @@ const yb_path = process.env.YB_PATH;
 
 //Testing fallback to second preference zone when all servers in primary preference zone are down.
 async function createConnection() {
-    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&topologyKeys=cloud1.datacenter1.rack1:2,cloud1.datacenter2.rack1:1"
+    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&topologyKeys=cloud1.datacenter1.rack1:2,cloud1.datacenter2.rack1:1,cloud1.datacenter1.rack2:3"
     let client = new pg.Client(yburl);
     client.on('error', () => {
         // ignore the error and handle exiting 
@@ -36,7 +36,7 @@ async function endNumConnections(numConnections, clientArray) {
     for (let i = 0; i < numConnections; i++) {
         await clientArray[i].end((err) => {
             if (err) {
-            } else {
+                console.log("Error in closing connection", err)
             }
         })
     }
@@ -50,8 +50,8 @@ function example() {
     })
     destroyCluster.on('close', async (code) => {
         if (code === 0) {
-            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "2", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter2.rack1"]);
-            console.log("Creating cluster with RF 2 with 2 different placement infos..")
+            const createCluster = spawn("./bin/yb-ctl", ["create", "--rf", "3", "--placement_info", "cloud1.datacenter1.rack1,cloud1.datacenter1.rack2,cloud1.datacenter2.rack1"]);
+            console.log("Creating cluster with RF 3 with 3 different placement infos..")
             createCluster.on('close', async (code) => {
                 if (code === 0) {
                     let clientArray = []
@@ -69,7 +69,7 @@ function example() {
                         const hosts = connectionMap.keys();
                         for (let value of hosts) {
                             let cnt = connectionMap.get(value);
-                            if (value === '127.0.0.2') {
+                            if (value === '127.0.0.3') {
                                 assert.equal(cnt, 12, 'Node ' + value + ' is not balanced');
                             } else {
                                 assert.equal(cnt, 0, 'Node ' + value + ' is not balanced');
@@ -88,15 +88,15 @@ function example() {
                             }
                             console.log("All connections are closed!")
 
-                            const stopOneNode = spawn("./bin/yb-ctl", ["stop_node", "2"])
+                            const stopOneNode = spawn("./bin/yb-ctl", ["stop_node", "3"])
                             stopOneNode.stdout.on("data", () => {
-                                console.log("Stopping node with host IP - 127.0.0.2")
+                                console.log("Stopping node with host IP - 127.0.0.3")
                             })
                             stopOneNode.on('close', async (code) => {
                                 if (code === 0) {
                                     clientArray = await createNumConnections(numConnections)
                                     setTimeout(() => {
-                                        console.log(numConnections, "connections are created after stopping node 2.");
+                                        console.log(numConnections, "connections are created after stopping node 3.");
                                         let connectionMap = pg.Client.connectionMap;
                                         console.log("Connection Map: ", connectionMap)
                                         const hosts = connectionMap.keys();
@@ -108,7 +108,7 @@ function example() {
                                                 assert.equal(cnt, 0, 'Node ' + value + ' is not balanced');
                                             }
                                         }
-                                        console.log("Since all server of preference value 1 are down load goes to the server with preference value 2")
+                                        console.log("Since all server of preference value 1 are down load goes to the server with preference value 2 only, no load on servers with preference value 3.")
                                     }, timeToMakeConnections)
                                 }
                             })

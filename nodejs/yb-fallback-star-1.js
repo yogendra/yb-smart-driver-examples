@@ -36,7 +36,7 @@ async function endNumConnections(numConnections, clientArray) {
     for (let i = 0; i < numConnections; i++) {
         await clientArray[i].end((err) => {
             if (err) {
-            } else {
+                console.log("Error in closing connection", err)
             }
         })
     }
