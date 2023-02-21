@@ -6,7 +6,7 @@ var assert = require('assert');
 const yb_path = process.env.YB_PATH;
 
 async function createConnection(){
-    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&&topologyKeys=cloud1.datacenter1.rack1"
+    const yburl = "postgresql://yugabyte:yugabyte@127.0.0.1:5433/yugabyte?loadBalance=true&topologyKeys=cloud1.datacenter1.rack1&ybServersRefreshInterval=0"
     let client = new pg.Client(yburl);
     client.on('error', () => {
         // ignore the error and handle exiting 
