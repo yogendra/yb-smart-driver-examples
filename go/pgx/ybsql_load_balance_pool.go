@@ -84,9 +84,13 @@ func startPoolExample() {
 }
 
 func initPool(url string) {
-	var err error
 	fmt.Printf("Initializing pool with url %s\n", url)
-	pool, err = pgxpool.Connect(context.Background(), url)
+	config, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		log.Fatalf("Error parsing the poolConfig: %s", err.Error())
+	}
+	config.MaxConns = 20
+	pool, err = pgxpool.ConnectConfig(context.Background(), config)
 	if err != nil {
 		log.Fatalf("Error initializing the pool: %s", err.Error())
 	}
